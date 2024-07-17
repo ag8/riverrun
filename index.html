@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Line Drawer with Ray Casting</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+        #canvas {
+            border: 1px solid black;
+        }
+        #actionButton {
+            margin: 10px;
+        }
+        #debug {
+            margin-top: 10px;
+            white-space: pre-line;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <button id="actionButton">Draw Red Line</button>
+    <canvas id="canvas" width="800" height="600"></canvas>
+    <div id="debug"></div>
+
+    <script src="utils.js"></script>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const actionButton = document.getElementById('actionButton');
+        const debugDiv = document.getElementById('debug');
+
+        let state = 'idle';
+        let redPoints = [];
+        let bluePoints = [];
+        const TOLERANCE = 10;
+        const EPSILON = 0.1;
+
+        actionButton.addEventListener('click', handleButtonClick);
+
+        function handleButtonClick() {
+            if (state === 'idle') {
+                startDrawing('red');
+            } else if (state === 'red_complete') {
+                startDrawing('blue');
+            } else if (state === 'blue_complete') {
+                state = 'ready_for_click';
+                updateDebug("Click between the lines to cast a ray");
+            }
+        }
+
+        function startDrawing(color) {
+            state = color === 'red' ? 'drawing_red' : 'drawing_blue';
+            actionButton.disabled = true;
+            updateDebug(`Started drawing ${color} line`);
+        }
+
+        canvas.addEventListener('mousemove', handleMouseMove);
+        canvas.addEventListener('click', handleCanvasClick);
+
+        function handleMouseMove(e) {
+            if (state !== 'drawing_red' && state !== 'drawing_blue') return;
+
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const points = state === 'drawing_red' ? redPoints : bluePoints;
+
+            if (points.length === 0) {
+                points.push({x: 0, y: mouseY});
+                drawLines();
+                return;
+            }
+
+            if (mouseX >= canvas.width) {
+                finishDrawing(mouseY);
+            } else {
+                const newPoint = findValidPoint(mouseX, mouseY);
+                if (newPoint) {
+                    points.push(newPoint);
+                    drawLines();
+                }
+            }
+        }
+
+        function handleCanvasClick(e) {
+            if (state !== 'ready_for_click') return;
+
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+
+            castRay(clickX, clickY);
+        }
+
+        function castRay(x, y) {
+            const angleStep = Math.PI / 180;
+            for (let angle = 0; angle < Math.PI; angle += angleStep) {
+                const dx = Math.cos(angle);
+                const dy = Math.sin(angle);
+
+                let redIntersection = null;
+                let blueIntersection = null;
+
+                // Check positive direction
+                for (let t = 0; t < 1000; t++) {
+                    const px = x + t * dx;
+                    const py = y + t * dy;
+
+                    if (!redIntersection) {
+                        redIntersection = findIntersection(x, y, px, py, redPoints);
+                    }
+                    if (!blueIntersection) {
+                        blueIntersection = findIntersection(x, y, px, py, bluePoints);
+                    }
+
+                    if (redIntersection && blueIntersection) break;
+                }
+
+                // Check negative direction
+                for (let t = 0; t < 1000; t++) {
+                    const px = x - t * dx;
+                    const py = y - t * dy;
+
+                    if (!redIntersection) {
+                        redIntersection = findIntersection(x, y, px, py, redPoints);
+                    }
+                    if (!blueIntersection) {
+                        blueIntersection = findIntersection(x, y, px, py, bluePoints);
+                    }
+
+                    if (redIntersection && blueIntersection) break;
+                }
+
+                if (redIntersection && blueIntersection) {
+                    // Ensure red intersection is in one direction and blue in the other
+                    if ((redIntersection.x - x) * (blueIntersection.x - x) +
+                        (redIntersection.y - y) * (blueIntersection.y - y) < 0) {
+                        drawRay(redIntersection, {x, y}, blueIntersection);
+                        findEquidistantPoint(x, y, redIntersection, blueIntersection);
+                        return;
+                    }
+                }
+            }
+            updateDebug("No valid ray found");
+        }
+
+        function findIntersection(x1, y1, x2, y2, linePoints) {
+            for (let i = 0; i < linePoints.length - 1; i++) {
+                const x3 = linePoints[i].x;
+                const y3 = linePoints[i].y;
+                const x4 = linePoints[i + 1].x;
+                const y4 = linePoints[i + 1].y;
+
+                const den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+                if (den === 0) continue;
+
+                const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den;
+                const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / den;
+
+                if (t > 0 && t < 1 && u > 0 && u < 1) {
+                    return {
+                        x: x1 + t * (x2 - x1),
+                        y: y1 + t * (y2 - y1)
+                    };
+                }
+            }
+            return null;
+        }
+
+        function drawRay(redIntersection, startPoint, blueIntersection) {
+            ctx.beginPath();
+            ctx.moveTo(redIntersection.x, redIntersection.y);
+            ctx.lineTo(startPoint.x, startPoint.y);
+            ctx.lineTo(blueIntersection.x, blueIntersection.y);
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+    </script>
+</body>
+</html>
