@@ -147,9 +147,12 @@
                     if ((redIntersection.x - x) * (blueIntersection.x - x) +
                         (redIntersection.y - y) * (blueIntersection.y - y) < 0) {
                         drawRay(redIntersection, {x, y}, blueIntersection);
-                        const intersections = findEquidistantPoint(x, y, redIntersection, blueIntersection);
-                        if (intersections) {
-                            updateDebug(`Red intersections: ${intersections.red.length}, Blue intersections: ${intersections.blue.length}`);
+                        const result = findEquidistantPoint(x, y, redIntersection, blueIntersection);
+                        if (result && result.gatewayPairs) {
+                            updateDebug(`Found ${result.gatewayPairs.length} gateway pairs`);
+                            result.gatewayPairs.forEach((pair, index) => {
+                                updateDebug(`Gateway ${index + 1}: ${pair[0].color} to ${pair[1].color}`);
+                            });
                         }
                         return;
                     }

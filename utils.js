@@ -53,8 +53,12 @@ function drawAndFindIntersections(x, y, radius) {
     redIntersections.forEach(point => drawPoint(point, 'red'));
     blueIntersections.forEach(point => drawPoint(point, 'blue'));
 
-    return { red: redIntersections, blue: blueIntersections };
+    const intersections = { red: redIntersections, blue: blueIntersections };
+    const gatewayPairs = findGatewayPairsAndDrawBisectors(x, y, intersections);
+
+    return { intersections, gatewayPairs };
 }
+
 
 function findCircleLineIntersections(cx, cy, r, linePoints) {
     let intersections = [];
@@ -263,4 +267,77 @@ function updateDebug(message) {
     if (debugDiv.textContent.split('\n').length > 30) {
         debugDiv.textContent = debugDiv.textContent.split('\n').slice(0, 30).join('\n');
     }
+}
+
+function findGatewayPairsAndDrawBisectors(cx, cy, intersections) {
+    const allIntersections = [...intersections.red.map(p => ({...p, color: 'red'})),
+                              ...intersections.blue.map(p => ({...p, color: 'blue'}))];
+
+    allIntersections.sort((a, b) => {
+        const angleA = Math.atan2(a.y - cy, a.x - cx);
+        const angleB = Math.atan2(b.y - cy, b.x - cx);
+        return angleA - angleB;
+    });
+
+    const gatewayPairs = [];
+    for (let i = 0; i < allIntersections.length; i++) {
+        const current = allIntersections[i];
+        const next = allIntersections[(i + 1) % allIntersections.length];
+        if (current.color !== next.color) {
+            gatewayPairs.push([current, next]);
+        }
+    }
+
+    if (gatewayPairs.length === 2) {
+        const [bisector1, bisector2] = calculateOptimalBisectors(cx, cy, gatewayPairs[0], gatewayPairs[1]);
+        drawAngleBisector(cx, cy, bisector1);
+        drawAngleBisector(cx, cy, bisector2);
+    }
+
+    return gatewayPairs;
+}
+
+function calculateOptimalBisectors(cx, cy, pair1, pair2) {
+    const interiorBisector1 = calculateAngleBisector(cx, cy, pair1[0], pair1[1]);
+    const exteriorBisector1 = interiorBisector1 + Math.PI;
+    const interiorBisector2 = calculateAngleBisector(cx, cy, pair2[0], pair2[1]);
+    const exteriorBisector2 = interiorBisector2 + Math.PI;
+
+    const angleDiff1 = Math.abs(angleDifference(interiorBisector1, interiorBisector2));
+    const angleDiff2 = Math.abs(angleDifference(interiorBisector1, exteriorBisector2));
+    const angleDiff3 = Math.abs(angleDifference(exteriorBisector1, interiorBisector2));
+    const angleDiff4 = Math.abs(angleDifference(exteriorBisector1, exteriorBisector2));
+
+    const maxDiff = Math.max(angleDiff1, angleDiff2, angleDiff3, angleDiff4);
+
+    if (maxDiff === angleDiff1) return [interiorBisector1, interiorBisector2];
+    if (maxDiff === angleDiff2) return [interiorBisector1, exteriorBisector2];
+    if (maxDiff === angleDiff3) return [exteriorBisector1, interiorBisector2];
+    return [exteriorBisector1, exteriorBisector2];
+}
+
+function calculateAngleBisector(cx, cy, point1, point2) {
+    const angle1 = Math.atan2(point1.y - cy, point1.x - cx);
+    const angle2 = Math.atan2(point2.y - cy, point2.x - cx);
+    return (angle1 + angle2) / 2;
+}
+
+function angleDifference(angle1, angle2) {
+    let diff = angle2 - angle1;
+    while (diff < -Math.PI) diff += 2 * Math.PI;
+    while (diff > Math.PI) diff -= 2 * Math.PI;
+    return diff;
+}
+
+function drawAngleBisector(cx, cy, angle) {
+    const length = Math.max(canvas.width, canvas.height); // Ensure the line spans the entire canvas
+    const endX = cx + length * Math.cos(angle);
+    const endY = cy + length * Math.sin(angle);
+
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(endX, endY);
+    ctx.strokeStyle = 'purple';
+    ctx.lineWidth = 2;
+    ctx.stroke();
 }
