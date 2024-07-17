@@ -147,7 +147,10 @@
                     if ((redIntersection.x - x) * (blueIntersection.x - x) +
                         (redIntersection.y - y) * (blueIntersection.y - y) < 0) {
                         drawRay(redIntersection, {x, y}, blueIntersection);
-                        findEquidistantPoint(x, y, redIntersection, blueIntersection);
+                        const intersections = findEquidistantPoint(x, y, redIntersection, blueIntersection);
+                        if (intersections) {
+                            updateDebug(`Red intersections: ${intersections.red.length}, Blue intersections: ${intersections.blue.length}`);
+                        }
                         return;
                     }
                 }
